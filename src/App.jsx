@@ -217,7 +217,7 @@ function MetadataModal({ evidencia, formData, setFormData, onGuardar, onCerrar }
 
 // ─── App principal ────────────────────────────────────────────────────────────
 export default function App() {
-  const [sesionId, setSesionId] = useState(crypto.randomUUID());
+  const [sesionId, setSesionId] = useState(() => crypto.randomUUID());
   const [evidencias, setEvidencias] = useState([]);
   const [fotoEditando, setFotoEditando] = useState(null);
   const [formData, setFormData] = useState(FORM_INICIAL);
@@ -227,8 +227,7 @@ export default function App() {
   const puedeEnviar = totalFotos > 0 && totalCompletas === totalFotos;
   const hayPendientes = totalFotos > 0 && totalCompletas < totalFotos;
 
-  const iniciarNuevaSesion = () => {
-    if (totalFotos > 0 && !window.confirm('¿Descartar las fotos actuales y comenzar de nuevo?')) return;
+  const reiniciarSesion = () => {
     setSesionId(crypto.randomUUID());
     setEvidencias([]);
   };
@@ -244,7 +243,6 @@ export default function App() {
       metadata: { ...FORM_INICIAL },
     }));
     setEvidencias(prev => [...prev, ...nuevas]);
-    // Reset el input para permitir re-seleccionar la misma foto
     e.target.value = '';
   };
 
@@ -266,26 +264,22 @@ export default function App() {
   };
 
   const handleEnviar = async () => {
+    // Aquí irá la lógica de Supabase
     alert('¡Listo para subir a Supabase! (Lógica pendiente)');
+    reiniciarSesion();
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F7F5] flex flex-col pb-28 max-w-lg mx-auto">
+    <div className="min-h-screen bg-[#F7F7F5] flex flex-col pb-28">
 
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-zinc-100 px-5 py-3.5 flex justify-between items-center sticky top-0 z-20">
+      <header className="bg-white/80 backdrop-blur-sm border-b border-zinc-100 px-5 py-3.5 flex items-center sticky top-0 z-20">
         <div>
           <h1 className="text-lg font-bold tracking-tight text-zinc-900">InfraCheck</h1>
           <p className="text-[10px] text-zinc-400 font-mono">
             sesión {sesionId.slice(0, 8)}
           </p>
         </div>
-        <button
-          onClick={iniciarNuevaSesion}
-          className="text-xs font-semibold text-zinc-500 hover:text-zinc-800 px-3 py-2 rounded-lg hover:bg-zinc-100 transition-colors"
-        >
-          Nueva sesión
-        </button>
       </header>
 
       {/* Contador de progreso (solo si hay fotos) */}
@@ -383,7 +377,7 @@ export default function App() {
       </main>
 
       {/* Footer fijo */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto px-5 py-4 bg-white/90 backdrop-blur-sm border-t border-zinc-100 flex gap-3 z-20">
+      <div className="fixed bottom-0 left-0 right-0 px-5 py-4 bg-white/90 backdrop-blur-sm border-t border-zinc-100 flex gap-3 z-20">
 
         {/* Botón cámara */}
         <label className="flex-shrink-0 w-14 h-14 bg-zinc-900 hover:bg-zinc-700 text-white flex items-center justify-center rounded-2xl cursor-pointer transition-colors active:scale-95">
