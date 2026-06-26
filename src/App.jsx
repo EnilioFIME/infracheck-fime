@@ -1,122 +1,52 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+// src/App.jsx
+import { useEffect, useState } from 'react';
+import { supabase } from './supabase/client';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [status, setStatus] = useState('Probando conexión...');
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        // Hacemos una consulta rápida a la tabla (solo pidiendo el id)
+        const { data, error } = await supabase
+          .from('incidencias')
+          .select('id')
+          .limit(1);
+
+        if (error) {
+          throw error;
+        }
+
+        setStatus('¡Conexión exitosa a Supabase! 🚀');
+        console.log('Datos recibidos (debe ser un arreglo):', data);
+      } catch (err) {
+        setStatus('Error en la conexión ❌');
+        setError(err.message);
+        console.error('Detalle del error:', err);
+      }
+    };
+
+    testConnection();
+  }, []);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4 text-center">
+      <h1 className="text-3xl font-bold mb-4 text-blue-600">FacilTrack</h1>
+      
+      <div className={`p-4 rounded-lg shadow-md ${error ? 'bg-red-100' : 'bg-green-100'}`}>
+        <h2 className="text-xl font-semibold text-gray-800">{status}</h2>
+        {error && (
+          <p className="mt-2 text-red-600 font-mono text-sm">{error}</p>
+        )}
+      </div>
+      
+      <p className="mt-6 text-gray-500 text-sm">
+        Abre la consola del navegador (F12) para ver los detalles.
+      </p>
+    </div>
+  );
 }
 
-export default App
+export default App;
