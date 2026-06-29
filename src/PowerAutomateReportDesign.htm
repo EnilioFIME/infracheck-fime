@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: letter;
+      margin: 40px; /* Volvemos a los márgenes normales y limpios */
+    }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+    }
+    
+    /* LA MAGIA DE LA TABLA PRINCIPAL */
+    table.main-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    thead {
+      display: table-header-group; 
+    }
+    tbody {
+      display: table-row-group;
+    }
+
+    /* Estilos del Encabezado */
+    .header-content {
+      border-bottom: 3px solid #712d3d;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+    }
+    
+    /* Sub-tabla invisible para alinear Texto e Imagen */
+    .header-layout-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: none;
+    }
+    .header-layout-table td {
+      border: none;
+      vertical-align: top;
+    }
+    
+    .header-text h1 {
+      color: #000;
+      font-size: 24px;
+      margin: 0 0 4px 0;
+    }
+    .header-text p {
+      color: #000;
+      font-size: 13px;
+      margin: 3px 0;
+    }
+    .header-text .subtitle {
+      color: #808080;
+      font-size: 11px;
+      font-style: italic;
+    }
+    
+    /* Control del Logo en la esquina derecha */
+    .header-logo {
+      text-align: right;
+      width: 160px; /* Espacio reservado para el logo */
+    }
+    .header-logo img {
+      max-height: 55px;
+      width: auto;
+      display: inline-block;
+    }
+    
+    /* Control de las Tarjetas */
+    .page-container {
+      page-break-after: always;
+      display: block;
+    }
+    .page-container:last-child {
+      page-break-after: auto;
+    }
+    .card {
+      background: white;
+      border-radius: 10px;
+      border: 1px solid #808080;
+      padding: 12px;
+      width: 100%;
+      max-width: 640px;
+      margin: 0 auto 20px auto;
+      page-break-inside: avoid;
+      box-sizing: border-box;
+    }
+    .card img {
+      width: 100%;
+     height: 320px;
+      object-fit: contain;
+      border-radius: 6px;
+      display: block;
+      margin-bottom: 10px;
+    }
+    .gallery-badge {
+      display: block;
+      margin-bottom: 8px;
+    }
+    .card-info {
+      display: inline-block;
+      margin-right: 5px;
+    }
+    .card-info .id-badge {
+      background: #712d3d;
+      color: white;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 10px;
+      font-weight: bold;
+    }
+    .card-description {
+      margin: 10px 3px 5px 3px;
+      font-size: 13px;
+      color: #444;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <table class="main-table">
+    <thead>
+      <tr>
+        <td>
+          <div class="header-content">
+            <table class="header-layout-table">
+              <tr>
+                <td class="header-text">
+                  <h1>Reporte de Fotos</h1>
+                  <p><strong>Centro de Costos:</strong> @{triggerBody()?['text_1']} | <strong>De:</strong> @{triggerBody()?['text_2']} <strong>A:</strong> @{triggerBody()?['text_3']}</p>
+                  <p class="subtitle">Generado el @{formatDateTime(utcNow(), 'dd/MM/yyyy HH:mm')}</p>
+                </td>
+                <td class="header-logo">
+<img
+src=@{triggerBody()?['text_4']} style="width:50px; height:50px; object-fit:contain"
+>
+                </td>
+              </tr>
+            </table>
+          </div>
+        </td>
+      </tr>
+    </thead>
+    
+    <tbody>
+      <tr>
+        <td>
+          <div class="page-container"> 
+          <div class="card">
+  <img src="data:image/jpeg;base64,@{body('Get_file_content_using_path')}" />
+  <div class="gallery-badge">
+    <div class="card-info">
+      <span class="id-badge">@{items('Apply_to_each')?['Periodo']}</span>
+    </div>
+    <div class="card-info">
+      <span class="id-badge">@{items('Apply_to_each')?['Nombre']}</span>
+    </div>
+  </div>
+  <p class="card-description">@{items('Apply_to_each')?['Descripcion']}</p>
+</div>
+</div><div class="page-container">
+    </div> </td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>
