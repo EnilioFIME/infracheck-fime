@@ -424,7 +424,7 @@ export default function ModuloCaptura() {
       </main>
 
       {/* Footer fijo */}
-      <div className="fixed bottom-16 left-0 right-0 px-5 py-4 bg-white/90 backdrop-blur-sm border-t border-zinc-100 flex gap-3 z-20">
+      <div className="fixed bottom-20 left-0 right-0 px-5 py-4 bg-white/90 backdrop-blur-sm border-t border-zinc-100 flex gap-3 z-20">
 
         {/* Botón cámara */}
         <label className="flex-shrink-0 w-14 h-14 bg-zinc-900 hover:bg-zinc-700 text-white flex items-center justify-center rounded-2xl cursor-pointer transition-colors active:scale-95">
