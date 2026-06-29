@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import emailjs from '@emailjs/browser';
+import { supabase } from './supabase/client';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const CATEGORIAS = ['Todas', 'Mobiliario', 'Eléctrico', 'Plomería', 'Estructural', 'Otro'];
@@ -13,7 +17,11 @@ const FORM_FILTROS_INICIAL = {
 // ─── Componente: Modal de Filtros ─────────────────────────────────────────────
 function FiltrosModal({ formData, setFormData, onGuardar, onCerrar }) {
   // Validación básica: Al menos un filtro debe estar lleno o modificado
-  const esValido = formData.ubicacion.trim() !== '' || formData.categoria !== 'Todas' || formData.fechaInicio !== '';
+  const esValido = 
+    formData.ubicacion.trim() !== '' && 
+    formData.categoria !== 'Todas' && 
+    formData.fechaInicio !== '' && 
+    formData.fechaFin !== '';
 
   return (
     <div 
@@ -46,7 +54,7 @@ function FiltrosModal({ formData, setFormData, onGuardar, onCerrar }) {
           className="px-5 pt-4 pb-4 overflow-y-auto flex flex-col gap-5"
         >
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-zinc-700">Filtrar por Ubicación <span className="text-zinc-400 font-normal">(Opcional)</span></label>
+            <label className="text-xs font-semibold text-zinc-700">Filtrar por Ubicación</label>
             <input
               type="text"
               placeholder="Ej. Edificio A"
@@ -137,26 +145,121 @@ export default function ModuloReportes() {
   const handleGenerarYEnviar = async () => {
     setIsGenerando(true);
     try {
-      // AQUÍ ENTRAREMOS EN EL PRÓXIMO PASO:
-      // 1. Obtener datos de Supabase filtrados
-      // 2. Generar PDF con jsPDF
-      // 3. Subir PDF al Bucket
-      // 4. Mandar correo con EmailJS
+      // 1. Inicializar EmailJS con tu Llave Pública
+      emailjs.init(import.meta.env.VITE_EMAILJS_PUBLIC_KEY);
+
+      // Procesar cada reporte pendiente en la lista
+      for (const reporte of reportesPendientes) {
+        const { ubicacion, categoria, fechaInicio, fechaFin } = reporte.filtros;
+
+        // Ajustamos la fecha de fin para que cubra hasta el último minuto de ese día en la base de datos
+        const fechaFinAjustada = `${fechaFin}T23:59:59.999Z`;
+        const fechaInicioAjustada = `${fechaInicio}T00:00:00.000Z`;
+
+        // 2. Consultar Supabase con los filtros exactos
+        const { data: incidencias, error: dbError } = await supabase
+          .from('incidencias')
+          .select('*')
+          .ilike('ubicacion', `%${ubicacion}%`) // Búsqueda flexible de texto
+          .eq('categoria', categoria)
+          .gte('created_at', fechaInicioAjustada)
+          .lte('created_at', fechaFinAjustada);
+
+        if (dbError) throw dbError;
+
+        // Si no hay datos, avisamos y saltamos al siguiente reporte
+        if (!incidencias || incidencias.length === 0) {
+          alert(`El ${reporte.nombre} no encontró coincidencias en la base de datos. Se omitirá.`);
+          continue; 
+        }
+
+        // 3. Dibujar el PDF
+        const doc = new jsPDF();
+        
+        // Encabezados del documento
+        doc.setFontSize(18);
+        doc.text(`Reporte de Infraestructura: ${categoria}`, 14, 20);
+        doc.setFontSize(11);
+        doc.setTextColor(100);
+        doc.text(`Ubicación filtrada: ${ubicacion}`, 14, 30);
+        doc.text(`Periodo: ${fechaInicio} al ${fechaFin}`, 14, 36);
+        doc.text(`Total de incidencias: ${incidencias.length}`, 14, 42);
+
+        // Construir la tabla dinámica
+        doc.autoTable({
+          startY: 50,
+          head: [['Fecha', 'Ubicación', 'Descripción', 'Prior.', 'Evidencia']],
+          body: incidencias.map(i => [
+            new Date(i.created_at).toLocaleDateString(),
+            i.ubicacion,
+            i.descripcion,
+            i.prioridad,
+            'Abrir foto' // Texto ancla
+          ]),
+          willDrawCell: (data) => {
+            // Pintar de azul el texto de la última columna para que parezca un link
+            if (data.section === 'body' && data.column.index === 4) {
+              doc.setTextColor(37, 99, 235); 
+            }
+          },
+          didDrawCell: (data) => {
+            // Inyectar el hipervínculo invisible sobre la celda de la foto
+            if (data.section === 'body' && data.column.index === 4) {
+              doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, {
+                url: incidencias[data.row.index].foto_url
+              });
+            }
+          }
+        });
+
+        // Convertir el PDF a formato Blob para subirlo
+        const pdfBlob = doc.output('blob');
+
+        // 4. Subir el PDF al Storage de Supabase
+        // Generamos un nombre único usando timestamp y el ID del reporte
+        const pdfName = `reporte_${Date.now()}_${reporte.id.split('-')[0]}.pdf`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('reportes_pdf')
+          .upload(pdfName, pdfBlob, { contentType: 'application/pdf' });
+
+        if (uploadError) throw uploadError;
+
+        // Obtener la URL pública del PDF recién creado
+        const { data: { publicUrl } } = supabase.storage
+          .from('reportes_pdf')
+          .getPublicUrl(pdfName);
+
+        // 5. Enviar el correo usando EmailJS
+        const templateParams = {
+          destinatario: emailDestino,
+          fecha_reporte: new Date().toLocaleDateString(),
+          link_pdf: publicUrl,
+        };
+
+        await emailjs.send(
+          import.meta.env.VITE_EMAILJS_SERVICE_ID,
+          import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
+          templateParams
+        );
+      }
+
+      alert('¡Todos los reportes configurados han sido procesados y enviados exitosamente!');
       
-      alert('¡Listo para conectar lógica de PDF y EmailJS!');
-      
-      // Simulamos que se envió para limpiar la UI
+      // Limpiar estados
       setReportesPendientes([]);
       setEmailDestino('');
+
     } catch (error) {
-      alert("Error al procesar: " + error.message);
+      console.error('Error detallado:', error);
+      alert("Hubo un error al procesar la solicitud: " + error.message);
     } finally {
       setIsGenerando(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F7F5] flex flex-col pb-40">
+    <div className="min-h-screen bg-[#F7F7F5] flex flex-col pb-20">
       
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-sm border-b border-zinc-100 px-5 py-3.5 flex items-center sticky top-0 z-20">
