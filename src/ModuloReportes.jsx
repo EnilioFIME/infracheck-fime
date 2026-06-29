@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import emailjs from '@emailjs/browser';
 import { supabase } from './supabase/client';
 
@@ -186,7 +186,7 @@ export default function ModuloReportes() {
         doc.text(`Total de incidencias: ${incidencias.length}`, 14, 42);
 
         // Construir la tabla dinámica
-        doc.autoTable({
+        autoTable({
           startY: 50,
           head: [['Fecha', 'Ubicación', 'Descripción', 'Prior.', 'Evidencia']],
           body: incidencias.map(i => [
