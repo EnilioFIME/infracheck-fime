@@ -39,9 +39,12 @@ function FiltrosModal({ formData, setFormData, onGuardar, onCerrar }) {
           </button>
         </div>
 
-        {/* Formulario */}
-        <form onSubmit={(e) => { e.preventDefault(); onGuardar(); }} className="px-5 pt-4 pb-40 overflow-y-auto flex flex-col gap-5">
-          
+        {/* Formulario — solo campos, sin botón submit */}
+        <form
+          id="form-filtros"
+          onSubmit={(e) => { e.preventDefault(); onGuardar(); }}
+          className="px-5 pt-4 pb-4 overflow-y-auto flex flex-col gap-5"
+        >
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-zinc-700">Filtrar por Ubicación <span className="text-zinc-400 font-normal">(Opcional)</span></label>
             <input
@@ -85,17 +88,21 @@ function FiltrosModal({ formData, setFormData, onGuardar, onCerrar }) {
               />
             </div>
           </div>
+        </form>
 
+        {/* Botón submit fuera del scroll, siempre visible en el fondo del modal */}
+        <div className="px-5 pb-6 pt-3 border-t border-zinc-100 bg-white">
           <button
             type="submit"
+            form="form-filtros"
             disabled={!esValido}
-            className={`w-full font-semibold py-3.5 rounded-xl transition-all mt-2 text-sm ${
+            className={`w-full font-semibold py-3.5 rounded-xl transition-all text-sm ${
               esValido ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
             }`}
           >
             Guardar Reporte a Generar
           </button>
-        </form>
+        </div>
       </div>
     </div>
   );
