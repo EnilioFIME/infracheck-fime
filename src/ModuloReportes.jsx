@@ -17,7 +17,7 @@ function FiltrosModal({ formData, setFormData, onGuardar, onCerrar }) {
 
   return (
     <div 
-      className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center"
+      className="fixed inset-0 bg-black/50 z-100 flex items-end justify-center"
       onClick={(e) => { if (e.target === e.currentTarget) onCerrar(); }}
     >
       <div className="bg-white rounded-t-3xl w-full max-w-lg flex flex-col max-h-[92vh] animate-slide-up">
@@ -40,7 +40,7 @@ function FiltrosModal({ formData, setFormData, onGuardar, onCerrar }) {
         </div>
 
         {/* Formulario */}
-        <form onSubmit={(e) => { e.preventDefault(); onGuardar(); }} className="px-5 pt-4 pb-6 overflow-y-auto flex flex-col gap-5">
+        <form onSubmit={(e) => { e.preventDefault(); onGuardar(); }} className="px-5 pt-4 pb-40 overflow-y-auto flex flex-col gap-5">
           
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-zinc-700">Filtrar por Ubicación <span className="text-zinc-400 font-normal">(Opcional)</span></label>
@@ -149,7 +149,7 @@ export default function ModuloReportes() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F7F5] flex flex-col pb-32">
+    <div className="min-h-screen bg-[#F7F7F5] flex flex-col pb-40">
       
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-sm border-b border-zinc-100 px-5 py-3.5 flex items-center sticky top-0 z-20">
