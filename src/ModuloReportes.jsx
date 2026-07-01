@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import html2pdf from 'html2pdf.js';
+import { jsPDF } from 'jspdf';
 import emailjs from '@emailjs/browser';
 import { supabase } from './supabase/client';
 
@@ -32,90 +32,146 @@ const urlToBase64 = async (url) => {
   }
 };
 
-// Genera el HTML string exacto que se convertirá a PDF
-const generarHTMLReporte = (incidencias, filtros) => {
-  const centroCostos = filtros.ubicacion || 'General';
-  const fechaGeneracion = new Date().toLocaleString('es-MX');
+// Genera el PDF directamente con jsPDF sin pasar por HTML ni html2canvas
+const generarPDF = async (incidencias, filtros) => {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
 
-  const cardsHTML = incidencias.map(incidencia => `
-    <div class="page-container"> 
-      <div class="card">
-        <img src="${incidencia.base64Foto}" alt="Evidencia" />
-        <div class="gallery-badge">
-          <div class="card-info">
-            <span class="id-badge">${incidencia.categoria}</span>
-          </div>
-          <div class="card-info">
-            <span class="id-badge">${incidencia.ubicacion}</span>
-          </div>
-        </div>
-        <p class="card-description"><strong>Reporte:</strong> ${incidencia.descripcion}</p>
-        ${incidencia.observaciones ? `<p class="card-description" style="color: #666;"><strong>Notas:</strong> ${incidencia.observaciones}</p>` : ''}
-      </div>
-    </div>
-  `).join('');
+  // ── Dimensiones de página ──────────────────────────────────────────────────
+  const PW = 210;   // ancho A4 en mm
+  const PH = 297;   // alto A4 en mm
+  const M  = 15;    // margen general
+  const CW = PW - M * 2; // ancho útil
 
-  return `
-    <!DOCTYPE html>
-    <html lang="es">
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        @page { size: letter; margin: 40px; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; margin: 0; padding: 0; }
-        table.main-table { width: 100%; border-collapse: collapse; }
-        thead { display: table-header-group; }
-        tbody { display: table-row-group; }
-        .header-content { border-bottom: 3px solid #2563EB; padding-bottom: 10px; margin-bottom: 20px; }
-        .header-layout-table { width: 100%; border-collapse: collapse; border: none; }
-        .header-layout-table td { border: none; vertical-align: top; }
-        .header-text h1 { color: #000; font-size: 24px; margin: 0 0 4px 0; }
-        .header-text p { color: #000; font-size: 13px; margin: 3px 0; }
-        .header-text .subtitle { color: #808080; font-size: 11px; font-style: italic; }
-        .header-logo { text-align: right; width: 160px; }
-        .page-container { page-break-inside: avoid; display: block; margin-bottom: 25px; }
-        .card { background: white; border-radius: 10px; border: 1px solid #d4d4d8; padding: 12px; width: 100%; max-width: 640px; margin: 0 auto; box-sizing: border-box; }
-        .card img { width: 100%; height: 320px; object-fit: contain; border-radius: 6px; display: block; margin-bottom: 10px; background-color: #f4f4f5; }
-        .gallery-badge { display: block; margin-bottom: 8px; }
-        .card-info { display: inline-block; margin-right: 5px; }
-        .card-info .id-badge { background: #2563EB; color: white; border-radius: 6px; padding: 4px 8px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
-        .card-description { margin: 10px 3px 5px 3px; font-size: 13px; color: #444; line-height: 1.4; }
-      </style>
-    </head>
-    <body>
-      <table class="main-table">
-        <thead>
-          <tr>
-            <td>
-              <div class="header-content">
-                <table class="header-layout-table">
-                  <tr>
-                    <td class="header-text">
-                      <h1>Reporte de Evidencias</h1>
-                      <p><strong>Ubicación:</strong> ${centroCostos} | <strong>Periodo:</strong> ${filtros.fechaInicio} al ${filtros.fechaFin}</p>
-                      <p class="subtitle">Generado el ${fechaGeneracion}</p>
-                    </td>
-                    <td class="header-logo">
-                      <h2 style="color: #2563EB; margin:0; font-size:22px; font-weight:900; letter-spacing: -0.5px;">InfraCheck</h2>
-                      <p style="margin:0; font-size:12px; color:#71717a; font-weight: 600;">FIME - UANL</p>
-                    </td>
-                  </tr>
-                </table>
-              </div>
-            </td>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              ${cardsHTML}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </body>
-    </html>
-  `;
+  // ── Colores ────────────────────────────────────────────────────────────────
+  const BLUE   = [37, 99, 235];
+  const GRAY   = [113, 113, 122];
+  const BLACK  = [20, 20, 20];
+  const BORDER = [212, 212, 216];
+  const BGCARD = [248, 248, 247];
+
+  // ── Helper: texto con color ────────────────────────────────────────────────
+  const txt = (text, x, y, size, color, style = 'normal', align = 'left') => {
+    doc.setFontSize(size);
+    doc.setTextColor(...color);
+    doc.setFont('helvetica', style);
+    doc.text(String(text), x, y, { align });
+  };
+
+  // ── Helper: dibujar header (se llama en cada página) ──────────────────────
+  const dibujarHeader = () => {
+    // Línea azul superior
+    doc.setDrawColor(...BLUE);
+    doc.setLineWidth(0.8);
+    doc.line(M, M + 10, PW - M, M + 10);
+
+    // Título
+    txt('Reporte de Evidencias', M, M + 7, 18, BLACK, 'bold');
+
+    // InfraCheck alineado a la derecha
+    txt('InfraCheck', PW - M, M + 5, 14, BLUE, 'bold', 'right');
+    txt('FIME - UANL', PW - M, M + 10, 8, GRAY, 'normal', 'right');
+
+    // Subtítulo con filtros
+    const ubicacionLabel = filtros.ubicacion || 'General';
+    txt(`Ubicación: ${ubicacionLabel}  |  Periodo: ${filtros.fechaInicio} al ${filtros.fechaFin}`, M, M + 16, 8, BLACK, 'bold');
+    txt(`Generado el ${new Date().toLocaleString('es-MX')}`, M, M + 21, 7, GRAY, 'normal');
+  };
+
+  // ── Helper: obtener dimensiones reales de imagen desde base64 ─────────────
+  const getImgDimensions = (base64) => new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve({ w: 1, h: 1 });
+    img.src = base64;
+  });
+
+  // ── Primera página: solo header ───────────────────────────────────────────
+  dibujarHeader();
+  let cursorY = M + 30;
+
+  // ── Iterar evidencias ─────────────────────────────────────────────────────
+  for (let i = 0; i < incidencias.length; i++) {
+    const inc = incidencias[i];
+
+    // Nueva página para cada evidencia (excepto si es la primera y el cursor está libre)
+    if (i > 0) {
+      doc.addPage();
+      dibujarHeader();
+      cursorY = M + 30;
+    }
+
+    // ── Fondo de card ──────────────────────────────────────────────────────
+    const cardH = 185; // altura total de la card en mm
+    doc.setFillColor(...BGCARD);
+    doc.setDrawColor(...BORDER);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(M, cursorY, CW, cardH, 3, 3, 'FD');
+
+    // ── Imagen ────────────────────────────────────────────────────────────
+    const IMG_MAX_H = 130;
+    const IMG_W     = CW - 8; // padding interno de 4mm por lado
+    const imgX      = M + 4;
+    const imgY      = cursorY + 4;
+
+    if (inc.base64Foto) {
+      try {
+        const { w, h } = await getImgDimensions(inc.base64Foto);
+        const ratio    = w / h;
+        let drawW      = IMG_W;
+        let drawH      = drawW / ratio;
+
+        if (drawH > IMG_MAX_H) {
+          drawH = IMG_MAX_H;
+          drawW = drawH * ratio;
+        }
+
+        // Centrar horizontalmente dentro del espacio disponible
+        const drawX = imgX + (IMG_W - drawW) / 2;
+
+        // Fondo gris claro para el área de imagen
+        doc.setFillColor(244, 244, 245);
+        doc.roundedRect(imgX, imgY, IMG_W, IMG_MAX_H, 2, 2, 'F');
+
+        doc.addImage(inc.base64Foto, 'JPEG', drawX, imgY + (IMG_MAX_H - drawH) / 2, drawW, drawH);
+      } catch {
+        // Si falla la imagen, dibujar placeholder
+        doc.setFillColor(244, 244, 245);
+        doc.roundedRect(imgX, imgY, IMG_W, IMG_MAX_H, 2, 2, 'F');
+        txt('Imagen no disponible', M + CW / 2, imgY + IMG_MAX_H / 2, 9, GRAY, 'normal', 'center');
+      }
+    }
+
+    // ── Metadatos debajo de la imagen ─────────────────────────────────────
+    let metaY = cursorY + 4 + IMG_MAX_H + 6;
+
+    // Badges: categoría y ubicación
+    const badgeH = 5.5;
+    const badgePadX = 3;
+    const badges = [inc.categoria, inc.ubicacion].filter(Boolean);
+    let badgeX = M + 4;
+    badges.forEach(label => {
+      const badgeW = doc.getStringUnitWidth(label) * 8 / doc.internal.scaleFactor + badgePadX * 2;
+      doc.setFillColor(...BLUE);
+      doc.roundedRect(badgeX, metaY - 4, badgeW, badgeH, 1.5, 1.5, 'F');
+      txt(label.toUpperCase(), badgeX + badgePadX, metaY, 6.5, [255, 255, 255], 'bold');
+      badgeX += badgeW + 2.5;
+    });
+
+    metaY += 7;
+
+    // Descripción
+    txt('Reporte:', M + 4, metaY, 8, BLACK, 'bold');
+    txt(inc.descripcion || '—', M + 22, metaY, 8, BLACK, 'normal');
+    metaY += 5.5;
+
+    // Observaciones (si existen)
+    if (inc.observaciones) {
+      txt('Notas:', M + 4, metaY, 8, GRAY, 'bold');
+      txt(inc.observaciones, M + 18, metaY, 8, GRAY, 'normal');
+    }
+  }
+
+  return doc.output('blob');
 };
 
 // ─── Componente: Modal de Filtros ─────────────────────────────────────────────
@@ -236,21 +292,10 @@ export default function ModuloReportes() {
           })
         );
 
-        // 3. Inyectar datos en la plantilla HTML
-        const htmlString = generarHTMLReporte(incidenciasConBase64, reporte.filtros);
+        // 3. Generar PDF directamente con jsPDF
+        const pdfBlob = await generarPDF(incidenciasConBase64, reporte.filtros);
 
-        // 4. Configurar html2pdf y ejecutar la conversión
-        const opt = {
-          margin:       0,
-          filename:     `reporte_${reporte.id.split('-')[0]}.pdf`,
-          image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true },
-          jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-        };
-
-        const pdfBlob = await html2pdf().set(opt).from(htmlString).output('blob');
-
-        // 5. Subir a Supabase Storage
+        // 4. Subir a Supabase Storage
         const pdfName = `reporte_${Date.now()}_${reporte.id.split('-')[0]}.pdf`;
         const { error: uploadError } = await supabase.storage
           .from('reportes_pdf')

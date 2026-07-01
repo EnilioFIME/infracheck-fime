@@ -1,6 +1,56 @@
 import { useState } from 'react';
 import { supabase } from './supabase/client';
 
+// ─── Utilidad: Compresión de imágenes ─────────────────────────────────────────
+const comprimirImagen = (file) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl); // Liberamos memoria de inmediato
+      
+      let { width, height } = img;
+      const maxSize = 500;
+
+      // Calcular nuevas dimensiones manteniendo el aspect ratio
+      if (width > maxSize || height > maxSize) {
+        if (width > height) {
+          height = Math.round((height * maxSize) / width);
+          width = maxSize;
+        } else {
+          width = Math.round((width * maxSize) / height);
+          height = maxSize;
+        }
+      }
+
+      // Crear el canvas y dibujar la imagen redimensionada
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Exportar como JPEG al 80% de calidad
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('El canvas no pudo exportar el Blob.'));
+        }
+      }, 'image/jpeg', 0.8);
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Error al cargar la imagen para compresión.'));
+    };
+
+    img.src = objectUrl;
+  });
+};
+
 // ─── Constantes de opciones ───────────────────────────────────────────────────
 const CATEGORIAS = ['Mobiliario', 'Eléctrico', 'Plomería', 'Estructural', 'Otro'];
 const PRIORIDADES = ['Baja', 'Media', 'Alta'];
@@ -40,7 +90,6 @@ function EvidenciaCard({ evidencia, onEditar, onEliminar }) {
     <div className={`bg-white rounded-2xl overflow-hidden flex flex-col relative border border-zinc-200 ${
       esCompleta ? 'border-l-[3px] border-l-emerald-400' : 'border-l-[3px] border-l-amber-400'
     }`}>
-      {/* Botón eliminar */}
       <button
         onClick={() => onEliminar(evidencia.id)}
         aria-label="Eliminar evidencia"
@@ -51,7 +100,6 @@ function EvidenciaCard({ evidencia, onEditar, onEliminar }) {
         </svg>
       </button>
 
-      {/* Imagen */}
       <div className="relative">
         <img src={previewUrl} alt="Evidencia" className="w-full h-36 object-cover" />
         <div className="absolute bottom-2 left-2">
@@ -59,7 +107,6 @@ function EvidenciaCard({ evidencia, onEditar, onEliminar }) {
         </div>
       </div>
 
-      {/* Contenido */}
       <div className="p-3 flex flex-col gap-2.5 flex-1">
         {esCompleta ? (
           <div className="flex flex-col gap-1.5">
@@ -102,12 +149,10 @@ function MetadataModal({ evidencia, formData, setFormData, onGuardar, onCerrar }
       onClick={(e) => { if (e.target === e.currentTarget) onCerrar(); }}
     >
       <div className="bg-white rounded-t-3xl w-full max-w-lg flex flex-col max-h-[92vh] animate-slide-up">
-        {/* Handle drag visual */}
         <div className="flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full bg-zinc-200" />
         </div>
 
-        {/* Header del modal */}
         <div className="px-5 pb-3 flex items-center justify-between border-b border-zinc-100">
           <div>
             <h3 className="text-base font-semibold text-zinc-900">Información de la foto</h3>
@@ -117,40 +162,23 @@ function MetadataModal({ evidencia, formData, setFormData, onGuardar, onCerrar }
             onClick={onCerrar}
             className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 hover:bg-zinc-200 transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
-        {/* Preview de la foto en el modal */}
         <div className="px-5 pt-4">
           <img src={evidencia.previewUrl} alt="Preview" className="w-full h-28 object-cover rounded-xl" />
         </div>
 
-        {/* Formulario */}
         <form onSubmit={onGuardar} className="px-5 pt-4 pb-6 overflow-y-auto flex flex-col gap-4">
-
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-zinc-700">Ubicación *</label>
-            <input
-              required
-              type="text"
-              placeholder="Ej. Edificio A, Piso 2, Aula 204"
-              className="w-full border border-zinc-200 rounded-xl px-3.5 py-2.5 text-sm bg-zinc-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-zinc-400"
-              value={formData.ubicacion}
-              onChange={e => setFormData({ ...formData, ubicacion: e.target.value })}
-            />
+            <input required type="text" placeholder="Ej. Edificio A, Piso 2, Aula 204" className="w-full border border-zinc-200 rounded-xl px-3.5 py-2.5 text-sm bg-zinc-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-zinc-400" value={formData.ubicacion} onChange={e => setFormData({ ...formData, ubicacion: e.target.value })} />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-zinc-700">Categoría *</label>
-            <select
-              required
-              className="w-full border border-zinc-200 rounded-xl px-3.5 py-2.5 text-sm bg-zinc-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all appearance-none"
-              value={formData.categoria}
-              onChange={e => setFormData({ ...formData, categoria: e.target.value })}
-            >
+            <select required className="w-full border border-zinc-200 rounded-xl px-3.5 py-2.5 text-sm bg-zinc-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all appearance-none" value={formData.categoria} onChange={e => setFormData({ ...formData, categoria: e.target.value })}>
               <option value="" disabled>Selecciona una categoría</option>
               {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -158,28 +186,14 @@ function MetadataModal({ evidencia, formData, setFormData, onGuardar, onCerrar }
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-zinc-700">Descripción breve *</label>
-            <input
-              required
-              type="text"
-              placeholder="Ej. Lámpara fundida en el techo"
-              className="w-full border border-zinc-200 rounded-xl px-3.5 py-2.5 text-sm bg-zinc-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-zinc-400"
-              value={formData.descripcion}
-              onChange={e => setFormData({ ...formData, descripcion: e.target.value })}
-            />
+            <input required type="text" placeholder="Ej. Lámpara fundida en el techo" className="w-full border border-zinc-200 rounded-xl px-3.5 py-2.5 text-sm bg-zinc-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-zinc-400" value={formData.descripcion} onChange={e => setFormData({ ...formData, descripcion: e.target.value })} />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-zinc-700">Observaciones <span className="text-zinc-400 font-normal">(opcional)</span></label>
-            <textarea
-              rows={2}
-              placeholder="Notas adicionales..."
-              className="w-full border border-zinc-200 rounded-xl px-3.5 py-2.5 text-sm bg-zinc-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-zinc-400 resize-none"
-              value={formData.observaciones}
-              onChange={e => setFormData({ ...formData, observaciones: e.target.value })}
-            />
+            <textarea rows={2} placeholder="Notas adicionales..." className="w-full border border-zinc-200 rounded-xl px-3.5 py-2.5 text-sm bg-zinc-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-zinc-400 resize-none" value={formData.observaciones} onChange={e => setFormData({ ...formData, observaciones: e.target.value })} />
           </div>
 
-          {/* Selector de prioridad visual */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-zinc-700">Prioridad</label>
             <div className="grid grid-cols-3 gap-2">
@@ -187,14 +201,7 @@ function MetadataModal({ evidencia, formData, setFormData, onGuardar, onCerrar }
                 const c = PRIORIDAD_COLORS[p];
                 const activo = formData.prioridad === p;
                 return (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, prioridad: p })}
-                    className={`py-2 rounded-xl text-xs font-semibold border transition-all ${
-                      activo ? `${c.bg} ${c.text}` : 'border-zinc-200 text-zinc-400 bg-white hover:border-zinc-300'
-                    }`}
-                  >
+                  <button key={p} type="button" onClick={() => setFormData({ ...formData, prioridad: p })} className={`py-2 rounded-xl text-xs font-semibold border transition-all ${activo ? `${c.bg} ${c.text}` : 'border-zinc-200 text-zinc-400 bg-white hover:border-zinc-300'}`}>
                     <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${activo ? c.dot : 'bg-zinc-300'}`} />
                     {p}
                   </button>
@@ -203,10 +210,7 @@ function MetadataModal({ evidencia, formData, setFormData, onGuardar, onCerrar }
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3.5 rounded-xl transition-colors mt-1 text-sm"
-          >
+          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3.5 rounded-xl transition-colors mt-1 text-sm">
             Guardar información
           </button>
         </form>
@@ -233,18 +237,33 @@ export default function ModuloCaptura() {
     setEvidencias([]);
   };
 
-  const handleCapturarFoto = (e) => {
+  // NUEVA LÓGICA DE CAPTURA ASÍNCRONA
+  const handleCapturarFoto = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    const nuevas = files.map(file => ({
-      id: crypto.randomUUID(),
-      file,
-      previewUrl: URL.createObjectURL(file),
-      status: 'Pendiente',
-      metadata: { ...FORM_INICIAL },
-    }));
-    setEvidencias(prev => [...prev, ...nuevas]);
-    e.target.value = '';
+
+    try {
+      // Procesamos la compresión de todos los archivos en paralelo usando Promise.all
+      const nuevasEvidencias = await Promise.all(
+        files.map(async (file) => {
+          const blobComprimido = await comprimirImagen(file);
+          return {
+            id: crypto.randomUUID(),
+            file: blobComprimido, // Aquí guardamos el Blob ligero en lugar del File original
+            previewUrl: URL.createObjectURL(blobComprimido), // Preview renderizado ligero
+            status: 'Pendiente',
+            metadata: { ...FORM_INICIAL },
+          };
+        })
+      );
+
+      setEvidencias(prev => [...prev, ...nuevasEvidencias]);
+    } catch (error) {
+      console.error("Hubo un error al comprimir las imágenes:", error);
+      alert("No se pudieron cargar algunas imágenes. Intenta de nuevo.");
+    } finally {
+      e.target.value = ''; // Limpiar el input para permitir seleccionar la misma foto
+    }
   };
 
   const eliminarFoto = (id) => {
@@ -268,26 +287,21 @@ export default function ModuloCaptura() {
     setIsSubmitting(true);
     
     try {
-      // Iteramos sobre todas las evidencias para subirlas una por una
       for (const evidencia of evidencias) {
-        
-        // 1. Generar un nombre único para la foto (Agrupadas por sesión en el Storage)
-        const fileExt = evidencia.file.name.split('.').pop() || 'jpg';
-        const fileName = `${sesionId}/${evidencia.id}.${fileExt}`;
+        // CAMBIO CRÍTICO: Los objetos Blob no tienen propiedad ".name". 
+        // Como sabemos que el canvas siempre exporta 'image/jpeg', lo hardcodeamos directo.
+        const fileName = `${sesionId}/${evidencia.id}.jpg`;
 
-        // 2. Subir la imagen física al Bucket 'fotos_evidencia'
         const { error: uploadError } = await supabase.storage
           .from('fotos_evidencia')
-          .upload(fileName, evidencia.file);
+          .upload(fileName, evidencia.file, { contentType: 'image/jpeg' });
 
         if (uploadError) throw uploadError;
 
-        // 3. Obtener la URL pública de la foto recién subida
         const { data: { publicUrl } } = supabase.storage
           .from('fotos_evidencia')
           .getPublicUrl(fileName);
 
-        // 4. Guardar toda la información en la tabla 'incidencias'
         const { error: dbError } = await supabase
           .from('incidencias')
           .insert({
@@ -298,38 +312,31 @@ export default function ModuloCaptura() {
             observaciones: evidencia.metadata.observaciones,
             prioridad: evidencia.metadata.prioridad,
             foto_url: publicUrl
-            // activo_relacionado: evidencia.metadata.activo_relacionado // Descomenta si lo agregaste al form
           });
 
         if (dbError) throw dbError;
       }
 
-      // Si todo el ciclo termina sin errores:
       alert('¡Evidencias registradas correctamente!');
-      reiniciarSesion(); // Limpiamos la pantalla
+      reiniciarSesion(); 
       
     } catch (error) {
       console.error('Error al subir:', error);
       alert('Hubo un problema al subir los datos: ' + error.message);
     } finally {
-      setIsSubmitting(false); // Liberamos el botón
+      setIsSubmitting(false); 
     }
   };
 
   return (
     <div className="min-h-screen bg-[#F7F7F5] flex flex-col pb-28">
-
-      {/* Header */}
       <header className="bg-white/80 backdrop-blur-sm border-b border-zinc-100 px-5 py-3.5 flex items-center sticky top-0 z-20">
         <div>
           <h1 className="text-lg font-bold tracking-tight text-zinc-900">InfraCheck</h1>
-          <p className="text-[10px] text-zinc-400 font-mono">
-            sesión {sesionId.slice(0, 8)}
-          </p>
+          <p className="text-[10px] text-zinc-400 font-mono">sesión {sesionId.slice(0, 8)}</p>
         </div>
       </header>
 
-      {/* Contador de progreso (solo si hay fotos) */}
       {totalFotos > 0 && (
         <div className="px-5 pt-5">
           <div className="flex items-center justify-between mb-1.5">
@@ -343,17 +350,11 @@ export default function ModuloCaptura() {
             )}
           </div>
           <div className="w-full h-1 bg-zinc-200 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                puedeEnviar ? 'bg-emerald-400' : 'bg-blue-500'
-              }`}
-              style={{ width: `${totalFotos > 0 ? (totalCompletas / totalFotos) * 100 : 0}%` }}
-            />
+            <div className={`h-full rounded-full transition-all duration-500 ${puedeEnviar ? 'bg-emerald-400' : 'bg-blue-500'}`} style={{ width: `${totalFotos > 0 ? (totalCompletas / totalFotos) * 100 : 0}%` }} />
           </div>
         </div>
       )}
 
-      {/* Título de sección */}
       <div className="px-5 pt-5 pb-3">
         <h2 className="text-2xl font-bold text-zinc-900">
           {totalFotos === 0 ? 'Evidencias' : `${totalFotos} foto${totalFotos > 1 ? 's' : ''}`}
@@ -365,84 +366,37 @@ export default function ModuloCaptura() {
         )}
       </div>
 
-      {/* Contenido principal */}
       <main className="flex-1 px-5">
         {totalFotos === 0 ? (
-          // Estado vacío
           <label className="flex flex-col items-center justify-center h-56 border-2 border-dashed border-zinc-300 rounded-2xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/40 transition-all group">
             <div className="w-14 h-14 rounded-2xl bg-zinc-100 group-hover:bg-blue-100 flex items-center justify-center mb-3 transition-colors">
-              <svg className="w-7 h-7 text-zinc-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+              <svg className="w-7 h-7 text-zinc-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
             </div>
-            <p className="text-sm font-semibold text-zinc-500 group-hover:text-blue-600 transition-colors">
-              Toca para agregar fotos
-            </p>
+            <p className="text-sm font-semibold text-zinc-500 group-hover:text-blue-600 transition-colors">Toca para agregar fotos</p>
             <p className="text-xs text-zinc-400 mt-1">Cámara o galería · Múltiples a la vez</p>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              multiple
-              className="hidden"
-              onChange={handleCapturarFoto}
-            />
+            <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleCapturarFoto} />
           </label>
         ) : (
-          // Galería de evidencias
           <div className="grid grid-cols-2 gap-3">
-            {evidencias.map(ev => (
-              <EvidenciaCard
-                key={ev.id}
-                evidencia={ev}
-                onEditar={abrirModal}
-                onEliminar={eliminarFoto}
-              />
-            ))}
+            {evidencias.map(ev => <EvidenciaCard key={ev.id} evidencia={ev} onEditar={abrirModal} onEliminar={eliminarFoto} />)}
 
-            {/* Botón para agregar más fotos dentro de la galería */}
             <label className="flex flex-col items-center justify-center h-full min-h-[160px] border-2 border-dashed border-zinc-200 rounded-2xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all group">
               <div className="w-10 h-10 rounded-xl bg-zinc-100 group-hover:bg-blue-100 flex items-center justify-center mb-2 transition-colors">
-                <svg className="w-5 h-5 text-zinc-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                </svg>
+                <svg className="w-5 h-5 text-zinc-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
               </div>
-              <p className="text-xs font-semibold text-zinc-400 group-hover:text-blue-500 transition-colors text-center px-3">
-                Agregar más fotos
-              </p>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={handleCapturarFoto}
-              />
+              <p className="text-xs font-semibold text-zinc-400 group-hover:text-blue-500 transition-colors text-center px-3">Agregar más fotos</p>
+              <input type="file" accept="image/*" multiple className="hidden" onChange={handleCapturarFoto} />
             </label>
           </div>
         )}
       </main>
 
-      {/* Footer fijo */}
       <div className="fixed bottom-20 left-0 right-0 px-5 py-4 bg-white/90 backdrop-blur-sm border-t border-zinc-100 flex gap-3 z-20">
-
-        {/* Botón cámara */}
         <label className="flex-shrink-0 w-14 h-14 bg-zinc-900 hover:bg-zinc-700 text-white flex items-center justify-center rounded-2xl cursor-pointer transition-colors active:scale-95">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            multiple
-            className="hidden"
-            onChange={handleCapturarFoto}
-          />
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleCapturarFoto} />
         </label>
 
-        {/* Botón enviar principal */}
         <button
           onClick={handleEnviar}
           disabled={!puedeEnviar || isSubmitting}
@@ -466,15 +420,8 @@ export default function ModuloCaptura() {
         </button>
       </div>
 
-      {/* Modal de metadatos */}
       {fotoEditando && (
-        <MetadataModal
-          evidencia={fotoEditando}
-          formData={formData}
-          setFormData={setFormData}
-          onGuardar={guardarMetadata}
-          onCerrar={() => setFotoEditando(null)}
-        />
+        <MetadataModal evidencia={fotoEditando} formData={formData} setFormData={setFormData} onGuardar={guardarMetadata} onCerrar={() => setFotoEditando(null)} />
       )}
     </div>
   );
