@@ -15,24 +15,38 @@ const FORM_FILTROS_INICIAL = {
 
 // ─── Utilidades para el PDF ───────────────────────────────────────────────────
 
-// Convierte la URL pública de Supabase a Base64 para evitar bloqueos al generar el PDF
-const urlToBase64 = async (url) => {
-  try {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    console.error("Error al convertir imagen a base64:", error);
-    return ""; // Regresa vacío si falla para que el PDF no crashee
-  }
+// SOLUCIÓN AL RATIO INVERTIDO:
+// Usamos un Canvas para "planchar" la imagen. Esto elimina los metadatos EXIF 
+// que confunden a jsPDF y hornea la rotación correcta directamente en los píxeles.
+const urlToBase64 = (url) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous'; // Necesario para que el canvas no bloquee imágenes de Supabase
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/jpeg', 0.9));
+    };
+    img.onerror = (e) => {
+      console.error("Error al convertir imagen a base64:", e);
+      resolve(""); // Retorna vacío si falla para no romper el PDF
+    };
+    img.src = url;
+  });
 };
 
-// Genera el PDF directamente con jsPDF sin pasar por HTML ni html2canvas
+// ── Helper: obtener dimensiones reales de imagen desde base64 ─────────────
+const getImgDimensions = (base64) => new Promise((resolve) => {
+  const img = new Image();
+  img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+  img.onerror = () => resolve({ w: 1, h: 1 });
+  img.src = base64;
+});
+
+// Genera el PDF directamente con jsPDF
 const generarPDF = async (incidencias, filtros) => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
 
@@ -40,7 +54,7 @@ const generarPDF = async (incidencias, filtros) => {
   const PW = 210;   // ancho A4 en mm
   const PH = 297;   // alto A4 en mm
   const M  = 15;    // margen general
-  const CW = PW - M * 2; // ancho útil
+  const CW = PW - M * 2; // ancho útil (180mm)
 
   // ── Colores ────────────────────────────────────────────────────────────────
   const BLUE   = [37, 99, 235];
@@ -59,59 +73,52 @@ const generarPDF = async (incidencias, filtros) => {
 
   // ── Helper: dibujar header (se llama en cada página) ──────────────────────
   const dibujarHeader = () => {
-    // Línea azul superior
     doc.setDrawColor(...BLUE);
     doc.setLineWidth(0.8);
     doc.line(M, M + 10, PW - M, M + 10);
 
-    // Título
     txt('Reporte de Evidencias', M, M + 7, 18, BLACK, 'bold');
-
-    // InfraCheck alineado a la derecha
     txt('InfraCheck', PW - M, M + 5, 14, BLUE, 'bold', 'right');
     txt('FIME - UANL', PW - M, M + 10, 8, GRAY, 'normal', 'right');
 
-    // Subtítulo con filtros
     const ubicacionLabel = filtros.ubicacion || 'General';
     txt(`Ubicación: ${ubicacionLabel}  |  Periodo: ${filtros.fechaInicio} al ${filtros.fechaFin}`, M, M + 16, 8, BLACK, 'bold');
     txt(`Generado el ${new Date().toLocaleString('es-MX')}`, M, M + 21, 7, GRAY, 'normal');
   };
 
-  // ── Helper: obtener dimensiones reales de imagen desde base64 ─────────────
-  const getImgDimensions = (base64) => new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
-    img.onerror = () => resolve({ w: 1, h: 1 });
-    img.src = base64;
-  });
-
   // ── Primera página: solo header ───────────────────────────────────────────
   dibujarHeader();
+  
+  // ── Layout de 2 Cards por página ──────────────────────────────────────────
   let cursorY = M + 30;
+  const cardH = 115; // Reducido a 115mm para que quepan 2 tarjetas holgadamente
+  const gap = 10;    // Espacio entre tarjetas
+  const IMG_MAX_H = 72; // Altura de la foto
 
   // ── Iterar evidencias ─────────────────────────────────────────────────────
   for (let i = 0; i < incidencias.length; i++) {
     const inc = incidencias[i];
 
-    // Nueva página para cada evidencia (excepto si es la primera y el cursor está libre)
-    if (i > 0) {
+    // Si es índice par mayor a 0 (2, 4, 6...), saltamos de página
+    if (i > 0 && i % 2 === 0) {
       doc.addPage();
       dibujarHeader();
       cursorY = M + 30;
+    } else if (i % 2 === 1) {
+      // Si es índice impar (1, 3, 5...), lo dibujamos en la misma página desplazando el cursor
+      cursorY += cardH + gap;
     }
 
     // ── Fondo de card ──────────────────────────────────────────────────────
-    const cardH = 185; // altura total de la card en mm
     doc.setFillColor(...BGCARD);
     doc.setDrawColor(...BORDER);
     doc.setLineWidth(0.3);
     doc.roundedRect(M, cursorY, CW, cardH, 3, 3, 'FD');
 
     // ── Imagen ────────────────────────────────────────────────────────────
-    const IMG_MAX_H = 130;
-    const IMG_W     = CW - 8; // padding interno de 4mm por lado
-    const imgX      = M + 4;
-    const imgY      = cursorY + 4;
+    const IMG_W = CW - 8; // padding interno de 4mm por lado
+    const imgX  = M + 4;
+    const imgY  = cursorY + 4;
 
     if (inc.base64Foto) {
       try {
@@ -120,21 +127,18 @@ const generarPDF = async (incidencias, filtros) => {
         let drawW      = IMG_W;
         let drawH      = drawW / ratio;
 
+        // Limitar altura a IMG_MAX_H conservando el ratio (object-fit: contain)
         if (drawH > IMG_MAX_H) {
           drawH = IMG_MAX_H;
           drawW = drawH * ratio;
         }
 
-        // Centrar horizontalmente dentro del espacio disponible
         const drawX = imgX + (IMG_W - drawW) / 2;
 
-        // Fondo gris claro para el área de imagen
         doc.setFillColor(244, 244, 245);
         doc.roundedRect(imgX, imgY, IMG_W, IMG_MAX_H, 2, 2, 'F');
-
         doc.addImage(inc.base64Foto, 'JPEG', drawX, imgY + (IMG_MAX_H - drawH) / 2, drawW, drawH);
       } catch {
-        // Si falla la imagen, dibujar placeholder
         doc.setFillColor(244, 244, 245);
         doc.roundedRect(imgX, imgY, IMG_W, IMG_MAX_H, 2, 2, 'F');
         txt('Imagen no disponible', M + CW / 2, imgY + IMG_MAX_H / 2, 9, GRAY, 'normal', 'center');
@@ -149,6 +153,7 @@ const generarPDF = async (incidencias, filtros) => {
     const badgePadX = 3;
     const badges = [inc.categoria, inc.ubicacion].filter(Boolean);
     let badgeX = M + 4;
+    
     badges.forEach(label => {
       const badgeW = doc.getStringUnitWidth(label) * 8 / doc.internal.scaleFactor + badgePadX * 2;
       doc.setFillColor(...BLUE);
@@ -176,7 +181,6 @@ const generarPDF = async (incidencias, filtros) => {
 
 // ─── Componente: Modal de Filtros ─────────────────────────────────────────────
 function FiltrosModal({ formData, setFormData, onGuardar, onCerrar }) {
-  // Validación ESTRICTA: Todos los campos obligatorios deben llenarse
   const esValido = 
     formData.ubicacion.trim() !== '' && 
     formData.categoria !== 'Todas' && 
@@ -268,7 +272,6 @@ export default function ModuloReportes() {
         const fechaFinAjustada = `${fechaFin}T23:59:59.999Z`;
         const fechaInicioAjustada = `${fechaInicio}T00:00:00.000Z`;
 
-        // 1. Obtener información de la base de datos
         const { data: incidencias, error: dbError } = await supabase
           .from('incidencias')
           .select('*')
@@ -284,7 +287,6 @@ export default function ModuloReportes() {
           continue; 
         }
 
-        // 2. Descargar las imágenes y pasarlas a Base64
         const incidenciasConBase64 = await Promise.all(
           incidencias.map(async (incidencia) => {
             const base64Foto = await urlToBase64(incidencia.foto_url);
@@ -292,10 +294,8 @@ export default function ModuloReportes() {
           })
         );
 
-        // 3. Generar PDF directamente con jsPDF
         const pdfBlob = await generarPDF(incidenciasConBase64, reporte.filtros);
 
-        // 4. Subir a Supabase Storage
         const pdfName = `reporte_${Date.now()}_${reporte.id.split('-')[0]}.pdf`;
         const { error: uploadError } = await supabase.storage
           .from('reportes_pdf')
@@ -303,7 +303,6 @@ export default function ModuloReportes() {
 
         if (uploadError) throw uploadError;
 
-        // 6. Obtener URL y mandar correo
         const { data: { publicUrl } } = supabase.storage
           .from('reportes_pdf')
           .getPublicUrl(pdfName);
