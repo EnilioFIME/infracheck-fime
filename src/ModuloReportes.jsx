@@ -181,11 +181,8 @@ const generarPDF = async (incidencias, filtros) => {
 
 // ─── Componente: Modal de Filtros ─────────────────────────────────────────────
 function FiltrosModal({ formData, setFormData, onGuardar, onCerrar }) {
-  const esValido = 
-    formData.ubicacion.trim() !== '' && 
-    formData.categoria !== 'Todas' && 
-    formData.fechaInicio !== '' && 
-    formData.fechaFin !== '';
+  const esValido = formData.fechaInicio !== '' && formData.fechaFin !== '';
+
 
   return (
     <div 
@@ -263,74 +260,84 @@ export default function ModuloReportes() {
   const puedeEnviar = reportesPendientes.length > 0 && emailValido && !isGenerando;
 
   const handleGenerarYEnviar = async () => {
-    setIsGenerando(true);
-    try {
-      emailjs.init(import.meta.env.VITE_EMAILJS_PUBLIC_KEY);
+  setIsGenerando(true);
+  try {
+    emailjs.init(import.meta.env.VITE_EMAILJS_PUBLIC_KEY);
 
-      for (const reporte of reportesPendientes) {
-        const { ubicacion, categoria, fechaInicio, fechaFin } = reporte.filtros;
-        const fechaFinAjustada = `${fechaFin}T23:59:59.999Z`;
-        const fechaInicioAjustada = `${fechaInicio}T00:00:00.000Z`;
+    for (const reporte of reportesPendientes) {
+      const { ubicacion, categoria, fechaInicio, fechaFin } = reporte.filtros;
+      const fechaFinAjustada = `${fechaFin}T23:59:59.999Z`;
+      const fechaInicioAjustada = `${fechaInicio}T00:00:00.000Z`;
 
-        const { data: incidencias, error: dbError } = await supabase
-          .from('incidencias')
-          .select('*')
-          .ilike('ubicacion', `%${ubicacion}%`)
-          .eq('categoria', categoria)
-          .gte('created_at', fechaInicioAjustada)
-          .lte('created_at', fechaFinAjustada);
+      // ── Construcción condicional de la query ──
+      let query = supabase
+        .from('incidencias')
+        .select('*')
+        .gte('created_at', fechaInicioAjustada)
+        .lte('created_at', fechaFinAjustada);
 
-        if (dbError) throw dbError;
-
-        if (!incidencias || incidencias.length === 0) {
-          alert(`El ${reporte.nombre} no encontró coincidencias en la base de datos. Se omitirá.`);
-          continue; 
-        }
-
-        const incidenciasConBase64 = await Promise.all(
-          incidencias.map(async (incidencia) => {
-            const base64Foto = await urlToBase64(incidencia.foto_url);
-            return { ...incidencia, base64Foto };
-          })
-        );
-
-        const pdfBlob = await generarPDF(incidenciasConBase64, reporte.filtros);
-
-        const pdfName = `reporte_${Date.now()}_${reporte.id.split('-')[0]}.pdf`;
-        const { error: uploadError } = await supabase.storage
-          .from('reportes_pdf')
-          .upload(pdfName, pdfBlob, { contentType: 'application/pdf' });
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('reportes_pdf')
-          .getPublicUrl(pdfName);
-
-        const templateParams = {
-          destinatario: emailDestino,
-          fecha_reporte: new Date().toLocaleDateString(),
-          link_pdf: publicUrl,
-        };
-
-        await emailjs.send(
-          import.meta.env.VITE_EMAILJS_SERVICE_ID,
-          import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
-          templateParams
-        );
+      if (ubicacion.trim() !== '') {
+        query = query.ilike('ubicacion', `%${ubicacion}%`);
       }
 
-      alert('¡Todos los reportes configurados han sido procesados y enviados exitosamente!');
-      setReportesPendientes([]);
-      setEmailDestino('');
+      if (categoria !== 'Todas') {
+        query = query.eq('categoria', categoria);
+      }
 
-    } catch (error) {
-      console.error('Error detallado:', error);
-      alert("Hubo un error al procesar la solicitud: " + error.message);
-    } finally {
-      setIsGenerando(false);
+      const { data: incidencias, error: dbError } = await query;
+      // ── Fin de la construcción condicional ──
+
+      if (dbError) throw dbError;
+
+      if (!incidencias || incidencias.length === 0) {
+        alert(`El ${reporte.nombre} no encontró coincidencias en la base de datos. Se omitirá.`);
+        continue; 
+      }
+
+      const incidenciasConBase64 = await Promise.all(
+        incidencias.map(async (incidencia) => {
+          const base64Foto = await urlToBase64(incidencia.foto_url);
+          return { ...incidencia, base64Foto };
+        })
+      );
+
+      const pdfBlob = await generarPDF(incidenciasConBase64, reporte.filtros);
+
+      const pdfName = `reporte_${Date.now()}_${reporte.id.split('-')[0]}.pdf`;
+      const { error: uploadError } = await supabase.storage
+        .from('reportes_pdf')
+        .upload(pdfName, pdfBlob, { contentType: 'application/pdf' });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('reportes_pdf')
+        .getPublicUrl(pdfName);
+
+      const templateParams = {
+        destinatario: emailDestino,
+        fecha_reporte: new Date().toLocaleDateString(),
+        link_pdf: publicUrl,
+      };
+
+      await emailjs.send(
+        import.meta.env.VITE_EMAILJS_SERVICE_ID,
+        import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
+        templateParams
+      );
     }
-  };
+
+    alert('¡Todos los reportes configurados han sido procesados y enviados exitosamente!');
+    setReportesPendientes([]);
+    setEmailDestino('');
+
+  } catch (error) {
+    console.error('Error detallado:', error);
+    alert("Hubo un error al procesar la solicitud: " + error.message);
+  } finally {
+    setIsGenerando(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-[#F7F7F5] flex flex-col pb-20">
